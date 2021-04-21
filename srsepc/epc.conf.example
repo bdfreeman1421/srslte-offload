@@ -57,6 +57,9 @@ gtpu_bind_addr   = 127.0.1.100
 sgi_if_addr      = 172.16.0.1
 sgi_if_name      = srs_spgw_sgi
 max_paging_queue = 100
+#opof_enable      = true
+#opof_server_addr = 127.0.0.1
+#opof_server_port = 3443
 
 ####################################################################
 # PCAP configuration
