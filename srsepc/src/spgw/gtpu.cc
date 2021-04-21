@@ -377,7 +377,7 @@ int spgw::gtpu::offload_add_session(srslte::byte_buffer_t* msg)
         PROTOCOL_ID_T proto;
         IP_VERSION_T ipver;
         ACTION_VALUE_T action;
-        proto = _TCP;
+        proto = _UDP;
         ipver = _IPV4;
         action = _ENCAP_DECAP;
         unsigned int timeout = 30u;
