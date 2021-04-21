@@ -23,6 +23,7 @@
 #define SRSEPC_GTPU_H
 
 #include "srsepc/hdr/spgw/spgw.h"
+#include "srsepc/hdr/spgw/opof_clientlib.h"
 #include "srslte/asn1/gtpc.h"
 #include "srslte/common/buffer_pool.h"
 #include "srslte/common/logmap.h"
@@ -42,11 +43,13 @@ public:
 
   int init_sgi(spgw_args_t* args);
   int init_s1u(spgw_args_t* args);
+  int init_opof(spgw_args_t* args);
   int get_sgi();
   int get_s1u();
 
   void handle_sgi_pdu(srslte::byte_buffer_t* msg);
   void handle_s1u_pdu(srslte::byte_buffer_t* msg);
+  int  offload_add_session(srslte::byte_buffer_t* msg);
   void send_s1u_pdu(srslte::gtp_fteid_t enb_fteid, srslte::byte_buffer_t* msg);
 
   virtual in_addr_t get_s1u_addr();
@@ -59,6 +62,9 @@ public:
 
   spgw*                m_spgw;
   gtpc_interface_gtpu* m_gtpc;
+  sessionTable_t*      opof_handle;
+  in_addr_t            sgi_saddr;
+  int                  sgi_sport;
 
   bool m_sgi_up;
   int  m_sgi;

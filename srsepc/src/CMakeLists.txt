@@ -46,7 +46,42 @@ target_link_libraries( srsepc  srsepc_mme
                                ${Boost_LIBRARIES}
                                ${SEC_LIBRARIES}
                                ${LIBCONFIGPP_LIBRARIES}
-                               ${SCTP_LIBRARIES})
+                               ${SCTP_LIBRARIES}
+                                /opt/openoffload/lib/libopof_client.a
+				lz4 
+				grpc 
+				grpc++ 
+				grpc++_alts 
+				grpc++_error_details 
+				grpc_plugin_support 
+				grpcpp_channelz 
+				grpc++_reflection 
+				grpc_unsecure 
+				grpc++_unsecure 
+				stdc++ 
+				cares  
+				protobuf  
+				protobuf-lite  
+				protoc  
+				gpr 
+				grpcpp_channelz 
+				upb 
+				absl_base 
+				absl_str_format_internal 
+				absl_int128 
+				absl_strings 
+				absl_bad_optional_access 
+				ssl 
+				crypto 
+				absl_strings_internal 
+				address_sorting 
+				absl_raw_logging_internal 
+				absl_throw_delegate 
+				absl_time 
+				absl_time 
+				absl_time_zone
+				z
+			       )
 
 add_executable(srsmbms mbms-gw/main.cc )
 target_link_libraries(srsmbms   srsepc_mbms_gw

@@ -46,7 +46,10 @@ typedef struct {
   std::string gtpu_bind_addr;
   std::string sgi_if_addr;
   std::string sgi_if_name;
-  uint32_t    max_paging_queue;
+  uint16_t    max_paging_queue;
+  bool	      opof_enable = false;
+  std::string opof_server_addr;
+  uint32_t    opof_server_port;
 } spgw_args_t;
 
 typedef struct spgw_tunnel_ctx {

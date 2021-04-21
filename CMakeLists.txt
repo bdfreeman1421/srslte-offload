@@ -78,6 +78,7 @@ option(ENABLE_HARDSIM  "Enable support for SIM cards"             ON)
 
 option(ENABLE_TTCN3    "Enable TTCN3 test binaries"               OFF)
 option(ENABLE_ZMQ_TEST "Enable ZMQ based E2E tests"               OFF)
+option(ENABLE_OPOF     "Enable OpenOffload        "               ON)
 
 option(BUILD_STATIC    "Attempt to statically link external deps" OFF)
 option(RPATH           "Enable RPATH"                             OFF)
@@ -185,6 +186,13 @@ if(ENABLE_HARDSIM)
     #link_directories(${PCSCLITE_LIBRARIES})
   endif (PCSCLITE_FOUND)
 endif(ENABLE_HARDSIM)
+
+# OpenOffload
+if(ENABLE_OPOF)
+    find_package(OPOF)
+    add_definitions(-DHAVE_OPENOFFLOAD)
+    link_directories(${OPOF_LIBRARIES})
+endif(ENABLE_OPOF)
 
 # UHD
 if(ENABLE_UHD)

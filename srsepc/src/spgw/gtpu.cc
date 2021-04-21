@@ -20,6 +20,7 @@
  */
 
 #include "srsepc/hdr/spgw/gtpu.h"
+#include "srsepc/hdr/spgw/opof_clientlib.h"
 #include "srsepc/hdr/mme/mme_gtpc.h"
 #include "srslte/upper/gtpu.h"
 #include <algorithm>
@@ -74,6 +75,13 @@ int spgw::gtpu::init(spgw_args_t* args, spgw* spgw, gtpc_interface_gtpu* gtpc, s
   err = init_s1u(args);
   if (err != SRSLTE_SUCCESS) {
     srslte::console("Could not initialize the S1-U interface.\n");
+    return err;
+  }
+
+  // Init OpenOffload
+  err = init_opof(args);
+  if (err != SRSLTE_SUCCESS) {
+    srslte::console("Could not initialize the openOffload -U interface.\n");
     return err;
   }
 
@@ -195,6 +203,34 @@ int spgw::gtpu::init_s1u(spgw_args_t* args)
   return SRSLTE_SUCCESS;
 }
 
+// establish the sessionTable gRPC channel if enabled
+int spgw::gtpu::init_opof(spgw_args_t* args)
+{
+   if (args->opof_enable == true) {
+      const char *address = args->opof_server_addr.c_str();
+      unsigned short port = args->opof_server_port;
+      char cert[2048];
+      m_gtpu_log->info("Calling opof_create_sessionTable %s %i", address, port);
+      opof_handle = opof_create_sessionTable(address, port, cert);
+      //sgi_saddr=inet_addr(args->sgi_if_addr.c_str());
+      sgi_saddr=m_s1u_addr.sin_addr.s_addr;
+      sgi_sport=m_s1u_addr.sin_port;
+      if (opof_handle == NULL) {
+          m_gtpu_log->info("opof_handle is null !");
+          m_gtpu_log->error("opof_handle is null !");
+          return SRSLTE_ERROR_CANT_START;
+      }
+      int status ;
+      unsigned long sessionId = 0 ;
+      sessionResponse_t*  opofResponse ;
+      opofResponse = (sessionResponse_t *)malloc(sizeof(sessionResponse_t));
+      opofResponse->sessionId = 0;
+      m_gtpu_log->info("Calling opof_get_session");
+      status = opof_get_session(opof_handle,  sessionId , opofResponse);
+   }
+   return SRSLTE_SUCCESS;
+}
+
 void spgw::gtpu::handle_sgi_pdu(srslte::byte_buffer_t* msg)
 {
   bool usr_found = false;
@@ -269,7 +305,159 @@ void spgw::gtpu::handle_s1u_pdu(srslte::byte_buffer_t* msg)
   } else {
     m_gtpu_log->debug("Forwarded packet to TUN interface. Bytes= %d/%d\n", n, msg->N_bytes);
   }
+  int m = offload_add_session (msg);
+  if (m < 0) {
+    m_gtpu_log->error("Could not add offload_session.\n");
+  } else {
+    m_gtpu_log->debug("Offloaded session");
+  }
   return;
+}
+
+int spgw::gtpu::offload_add_session(srslte::byte_buffer_t* msg)
+{
+  //  create session entry
+  //  add to sessions
+  //  send sessions
+ 
+  m_gtpu_log->info("Calling spgw::gtpu::offload_add_session");
+
+  srslte::gtpu_header_t header;
+  srslte::gtpu_read_header(msg, &header, m_gtpu_log);
+  std::map<uint32_t, srslte::gtpc_f_teid_ie>::iterator gtpu_fteid_it;
+  std::map<in_addr_t, uint32_t>::iterator              gtpc_teid_it;
+  srslte::gtpc_f_teid_ie                               enb_fteid;
+  uint32_t                                             spgw_teid;
+
+
+  struct iphdr*   iph = (struct iphdr*)msg->msg;
+  m_gtpu_log->info("SGi PDU -- IP src addr %s\n", srslte::gtpu_ntoa(iph->saddr).c_str());
+  m_gtpu_log->info("SGi PDU -- IP dst addr %s\n", srslte::gtpu_ntoa(iph->daddr).c_str());
+  struct in_addr encapMatchDestinationIp ;
+  encapMatchDestinationIp.s_addr = iph->saddr ;
+  m_gtpu_log->info("encapMatchestinationIp %s\n", srslte::gtpu_ntoa(encapMatchDestinationIp.s_addr).c_str());
+
+
+  // Find user and control tunnel
+  // for s1u the ue address is saddr 
+  // initiatialize enb_fteid
+  enb_fteid.ipv4=0;
+  enb_fteid.teid=0;
+  spgw_teid=0;
+  gtpu_fteid_it = m_ip_to_usr_teid.find(iph->saddr);
+  if (gtpu_fteid_it != m_ip_to_usr_teid.end()) {
+    enb_fteid = gtpu_fteid_it->second;
+    m_gtpu_log->info("OFFLOAD eNB IP:%s\n", srslte::gtpu_ntoa(enb_fteid.ipv4).c_str());
+  }
+  gtpc_teid_it = m_ip_to_ctr_teid.find(iph->saddr);
+  if (gtpc_teid_it != m_ip_to_ctr_teid.end()) {
+    spgw_teid = gtpc_teid_it->second;
+  }
+
+
+
+  m_gtpu_log->info("TEID 0x%x. Bytes=%d\n", header.teid, msg->N_bytes);
+
+  sessionRequest_t **requests;
+  sessionRequest_t *request;
+  addSessionResponse_t addResp;
+ 
+        unsigned int bufferSize;
+        /*  set buffer size to 1 
+        *  TODO: pack up to 64 sessions into an addSession message
+        *  SmartNIC will setup forward and reverse flows based on single session entry in request
+        */
+        bufferSize=1;
+        unsigned long sessionId;
+	// need srcLTE freiendly sessionId
+	// not clear teid is appropriate
+        sessionId=header.teid ;
+        clock_t begin = clock();
+        int status;
+        PROTOCOL_ID_T proto;
+        IP_VERSION_T ipver;
+        ACTION_VALUE_T action;
+        proto = _TCP;
+        ipver = _IPV4;
+        action = _ENCAP_DECAP;
+        unsigned int timeout = 30u;
+        struct in_addr srcip;
+        struct in_addr dstip;
+        uint   srcport;
+        uint   dstport;
+        struct in_addr nexthopip;
+        /* TODO: should be null - setting for demonstration */
+        nexthopip.s_addr= inet_addr("192.168.0.1");
+	// for encap/decap should be enodeB srcip and spgw dstip
+	// m_s1u_addr.sin_addr.s_addr
+        //srcip.s_addr= iph->saddr;
+	srcip.s_addr=enb_fteid.ipv4;
+        //srcip.s_addr= m_s1u_addr.sin_addr.s_addr;
+        //dstip.s_addr= iph->daddr;
+        dstip.s_addr= sgi_saddr;
+
+	// for encap/decap should be GTP port
+        srcport=GTPU_RX_PORT;
+	dstport=ntohs(sgi_sport);
+
+	MATCH_TYPE_T matchType = _GTP_HEADER;
+	ENCAP_TYPE_T encapType = _GTP;
+
+	uint encapTunnelEndpointId = enb_fteid.teid ;
+	uint tunnelEndpointId = spgw_teid ;
+
+
+        m_gtpu_log->info("srcip: %s uint:%u", inet_ntoa(srcip), srcip.s_addr);
+        m_gtpu_log->info("dstip: %s uint:%u", inet_ntoa(dstip), dstip.s_addr);
+        m_gtpu_log->info("request ipver: %u", ipver);
+        m_gtpu_log->info("request protcoldID: %u", proto);
+
+
+       requests = (sessionRequest_t **)malloc(bufferSize * (sizeof(requests)));
+        for (unsigned long i = 0; i < bufferSize; i++){
+                    request = (sessionRequest_t *)malloc(sizeof(*request));
+                    request->sessId = (2+sessionId);
+		    // for smartnic inlif/outlif should be a config variable
+                    request->inlif = 3;
+                    request->outlif = 4;
+                    request->srcPort = srcport;
+                    request->dstPort = dstport;
+                    request->proto = proto;
+                    request->ipver = ipver;
+                    request->nextHop = nexthopip;
+                    request->actType = action;
+                    request->srcIP = srcip;
+                    request->dstIP = dstip;
+                    request->cacheTimeout = timeout;
+		    request->matchType=matchType;
+		    request->encapType=encapType;
+                    request->tunnelEndpointId = tunnelEndpointId;
+                    request->encapTunnelEndpointId = encapTunnelEndpointId;
+		    request->encapMatchDestinationIp= encapMatchDestinationIp;
+                    requests[i] = request;
+                    m_gtpu_log->info("request session ID[%lu]: %lu", i,request->sessId);
+                    m_gtpu_log->info("request ipver in loop[%lu]: %i", i, request->ipver);
+                    m_gtpu_log->info("request srcIP in loop[%lu]: %u", i, request->srcIP.s_addr);
+                    m_gtpu_log->info("request timeout in loop[%lu]: %u", i, request->cacheTimeout);
+         }
+
+         m_gtpu_log->info("requests[0].ipver %i" , requests[0]->ipver);
+         status = opof_add_session(bufferSize,opof_handle, requests, &addResp);
+         if (status == FAILURE){
+             m_gtpu_log->info("ERROR: Adding offload sessions");
+             m_gtpu_log->error("ERROR: Adding offload sessions");
+             //return FAILURE;
+             return -1 ;
+         }
+         if (addResp.number_errors > 0){
+             m_gtpu_log->info("\n\nErrors in the following sessions\n");
+             for (int i=0; i < addResp.number_errors; i++){
+                 m_gtpu_log->info("\tSessionId: %lu\t error: %i\n", addResp.sessionErrors[i].sessionId, addResp.sessionErrors[i].errorStatus);
+             }
+         }
+         m_gtpu_log->info("addSession number_errors: %i", addResp.number_errors);
+	
+  return  0;
 }
 
 void spgw::gtpu::send_s1u_pdu(srslte::gtp_fteid_t enb_fteid, srslte::byte_buffer_t* msg)

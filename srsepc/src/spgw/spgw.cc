@@ -88,7 +88,6 @@ int spgw::init(spgw_args_t*                           args,
     srslte::console("Could not initialize the S1-U interface.\n");
     return SRSLTE_ERROR_CANT_START;
   }
-
   m_spgw_log->info("SP-GW Initialized.\n");
   srslte::console("SP-GW Initialized.\n");
   return SRSLTE_SUCCESS;

@@ -41,6 +41,10 @@ include_directories(
 link_directories(
     ${Boost_LIBRARY_DIRS}
     ${SEC_LIBRARY_DIRS}
+    /opt/openoffload/lib
+    /opt/grpc/lib
+    /opt/grpc/lib64
+    /usr/local/lib
 )
 
 ########################################################################

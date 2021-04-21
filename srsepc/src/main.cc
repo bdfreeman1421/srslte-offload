@@ -88,6 +88,9 @@ void parse_args(all_args_t* args, int argc, char* argv[])
   string   sgi_if_addr;
   string   sgi_if_name;
   string   dns_addr;
+  bool     opof_enable;
+  string   opof_server_addr;
+  uint16_t opof_server_port;
   string   hss_db_file;
   string   hss_auth_algo;
   string   log_filename;
@@ -120,6 +123,10 @@ void parse_args(all_args_t* args, int argc, char* argv[])
     ("spgw.sgi_if_addr",    bpo::value<string>(&sgi_if_addr)->default_value("176.16.0.1"),   "IP address of TUN interface for the SGi connection")
     ("spgw.sgi_if_name",    bpo::value<string>(&sgi_if_name)->default_value("srs_spgw_sgi"), "Name of TUN interface for the SGi connection")
     ("spgw.max_paging_queue", bpo::value<uint32_t>(&max_paging_queue)->default_value(100), "Max number of packets in paging queue")
+
+    ("spgw.opof_enable",    bpo::value<bool>(&opof_enable)->default_value(false), "enable open offload")
+    ("spgw.opof_server_addr", bpo::value<string>(&opof_server_addr)->default_value("127.0.0.1"), "IP address of OpenOffload server")
+    ("spgw.opof_server_port", bpo::value<uint16_t>(&opof_server_port)->default_value(3443), "OpenOffload server port")
 
     ("pcap.enable",   bpo::value<bool>(&args->mme_args.s1ap_args.pcap_enable)->default_value(false),         "Enable S1AP PCAP")
     ("pcap.filename", bpo::value<string>(&args->mme_args.s1ap_args.pcap_filename)->default_value("/tmp/epc.pcap"), "PCAP filename")
@@ -275,7 +282,13 @@ void parse_args(all_args_t* args, int argc, char* argv[])
   args->spgw_args.gtpu_bind_addr         = spgw_bind_addr;
   args->spgw_args.sgi_if_addr            = sgi_if_addr;
   args->spgw_args.sgi_if_name            = sgi_if_name;
+
+  args->spgw_args.opof_enable              = opof_enable;
+  args->spgw_args.opof_server_addr         = opof_server_addr;
+  args->spgw_args.opof_server_port         = opof_server_port;
+
   args->spgw_args.max_paging_queue       = max_paging_queue;
+
   args->hss_args.db_file                 = hss_db_file;
 
   // Apply all_level to any unset layers
