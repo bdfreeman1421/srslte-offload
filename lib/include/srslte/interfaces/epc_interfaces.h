@@ -103,6 +103,7 @@ class gtpu_interface_gtpc // GTP-C -> GTP-U
 {
 public:
   virtual in_addr_t get_s1u_addr() = 0;
+  virtual int get_s1u_port() = 0;
 
   virtual bool modify_gtpu_tunnel(in_addr_t ue_ipv4, srslte::gtpc_f_teid_ie dw_user_fteid, uint32_t up_ctrl_teid) = 0;
   virtual bool delete_gtpu_tunnel(in_addr_t ue_ipv4)                                                              = 0;

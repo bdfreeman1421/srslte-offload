@@ -53,6 +53,7 @@ public:
   void send_s1u_pdu(srslte::gtp_fteid_t enb_fteid, srslte::byte_buffer_t* msg);
 
   virtual in_addr_t get_s1u_addr();
+  virtual int get_s1u_port();
 
   virtual bool modify_gtpu_tunnel(in_addr_t ue_ipv4, srslte::gtp_fteid_t dw_user_fteid, uint32_t up_ctr_fteid);
   virtual bool delete_gtpu_tunnel(in_addr_t ue_ipv4);
@@ -97,6 +98,11 @@ inline int spgw::gtpu::get_s1u()
 inline in_addr_t spgw::gtpu::get_s1u_addr()
 {
   return m_s1u_addr.sin_addr.s_addr;
+}
+
+inline int spgw::gtpu::get_s1u_port()
+{
+  return m_s1u_addr.sin_port;
 }
 
 } // namespace srsepc

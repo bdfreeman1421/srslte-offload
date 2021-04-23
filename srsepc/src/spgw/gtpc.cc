@@ -20,6 +20,7 @@
  */
 
 #include "srsepc/hdr/spgw/gtpc.h"
+#include "srsepc/hdr/spgw/opof_clientlib.h"
 #include <algorithm>
 #include <cstring>
 #include <fcntl.h>
@@ -79,6 +80,15 @@ int spgw::gtpc::init(spgw_args_t*                           args,
     srslte::console("Could not initialize the IP pool.\n");
     return err;
   }
+  
+  // Init OpenOffload
+  err = init_opof(args);
+  if (err != SRSLTE_SUCCESS) {
+    srslte::console("Could not initialize the openOffload -c interface.\n");
+    return err;
+  }
+
+
 
   // Limit paging queue
   m_max_paging_queue = args->max_paging_queue;
@@ -151,6 +161,35 @@ bool spgw::gtpc::send_s11_pdu(const srslte::gtpc_pdu& pdu)
   }
   return true;
 }
+
+// establish the sessionTable gRPC channel if enabled
+int spgw::gtpc::init_opof(spgw_args_t* args)
+{
+   if (args->opof_enable == true) {
+      const char *address = args->opof_server_addr.c_str();
+      unsigned short port = args->opof_server_port;
+      char cert[2048];
+      m_gtpc_log->info("Calling opof_create_sessionTable %s %i", address, port);
+      opof_handle = opof_create_sessionTable(address, port, cert);
+      //sgi_saddr=inet_addr(args->sgi_if_addr.c_str());
+      sgi_saddr=m_gtpu->get_s1u_addr();
+      sgi_sport=m_gtpu->get_s1u_port();
+      if (opof_handle == NULL) {
+          m_gtpc_log->info("opof_handle is null !");
+          m_gtpc_log->error("opof_handle is null !");
+          return SRSLTE_ERROR_CANT_START;
+      }
+      int status ;
+      unsigned long sessionId = 0 ;
+      sessionResponse_t*  opofResponse ;
+      opofResponse = (sessionResponse_t *)malloc(sizeof(sessionResponse_t));
+      opofResponse->sessionId = 0;
+      m_gtpc_log->info("Calling opof_get_session");
+      status = opof_get_session(opof_handle,  sessionId , opofResponse);
+   }
+   return SRSLTE_SUCCESS;
+}
+
 
 void spgw::gtpc::handle_s11_pdu(srslte::byte_buffer_t* msg)
 {
@@ -235,8 +274,167 @@ void spgw::gtpc::handle_create_session_request(const struct srslte::gtpc_create_
 
   // Send Create session response to MME
   send_s11_pdu(cs_resp_pdu);
+
+  int m = offload_add_session(tunnel_ctx);
+  if (m < 0) {
+    m_gtpc_log->error("Could not add offload_session.\n");
+  } else {
+    m_gtpc_log->debug("Offloaded session");
+  }
+
   return;
 }
+
+int spgw::gtpc::offload_delete_session(spgw_tunnel_ctx_t* tunnel_ctx)
+{
+  int status;
+  sessionResponse_t delResp;
+  status = opof_del_session(opof_handle,  tunnel_ctx->up_user_fteid.teid, &delResp);
+  if (status == FAILURE){
+    m_gtpc_log->info("ERROR: Deleting offload session");
+    m_gtpc_log->error("ERROR: Deleteing offload sessions");
+    return -1 ;
+ }
+return 0;
+}
+
+int spgw::gtpc::offload_add_session(spgw_tunnel_ctx_t* tunnel_ctx)
+{
+  //  create session entry
+  //  add to sessions
+  //  send sessions
+
+  m_gtpc_log->info("Calling spgw::gtpc::offload_add_session");
+  // Check if IMSI has active GTP-C and/or GTP-U
+
+  std::map<uint32_t, srslte::gtpc_f_teid_ie>::iterator gtpu_fteid_it;
+  std::map<in_addr_t, uint32_t>::iterator              gtpc_teid_it;
+  srslte::gtp_fteid_t                                  enb_fteid;
+  srslte::gtp_fteid_t                                  spgw_teid;
+
+
+  struct in_addr encapMatchDestinationIp ;
+  encapMatchDestinationIp.s_addr = tunnel_ctx->ue_ipv4;
+  //m_gtpc_log->info("encapMatchestinationIp %s\n", srslte::gtpu_ntoa(encapMatchDestinationIp.s_addr).c_str());
+  struct in_addr addr1;
+  addr1.s_addr = encapMatchDestinationIp.s_addr;
+  m_gtpc_log->info("encapMatchestinationIp %s\n", inet_ntoa(addr1));
+
+
+  // Find user and control tunnel
+  // for s1u the ue address is saddr
+  // initiatialize enb_fteid
+  enb_fteid.ipv4=0;
+  enb_fteid.teid=0;
+  spgw_teid.teid=0;
+  enb_fteid = tunnel_ctx->dw_user_fteid;
+  spgw_teid = tunnel_ctx->up_user_fteid;
+
+
+  sessionRequest_t **requests;
+  sessionRequest_t *request;
+  addSessionResponse_t addResp;
+
+        unsigned int bufferSize;
+        /*  set buffer size to 1
+        *  TODO: pack up to 64 sessions into an addSession message
+        *  SmartNIC will setup forward and reverse flows based on single session entry in request
+        */
+        bufferSize=1;
+        unsigned long sessionId;
+        // need srcLTE freiendly sessionId
+        // not clear teid is appropriate
+        sessionId=spgw_teid.teid ;
+        clock_t begin = clock();
+        int status;
+        PROTOCOL_ID_T proto;
+        IP_VERSION_T ipver;
+        ACTION_VALUE_T action;
+        proto = _UDP;
+        ipver = _IPV4;
+        action = _ENCAP_DECAP;
+        unsigned int timeout = 30u;
+        struct in_addr srcip;
+        struct in_addr dstip;
+        uint   srcport;
+        uint   dstport;
+        struct in_addr nexthopip;
+        /* TODO: should be null - setting for demonstration */
+        nexthopip.s_addr= inet_addr("192.168.0.1");
+        // for encap/decap should be enodeB srcip and spgw dstip
+        // m_s1u_addr.sin_addr.s_addr
+        //srcip.s_addr= iph->saddr;
+        srcip.s_addr=enb_fteid.ipv4;
+        //srcip.s_addr= m_s1u_addr.sin_addr.s_addr;
+        //dstip.s_addr= iph->daddr;
+        dstip.s_addr= sgi_saddr;
+	        // for encap/decap should be GTP port
+        srcport=GTPU_RX_PORT;
+        dstport=ntohs(sgi_sport);
+
+        MATCH_TYPE_T matchType = _GTP_HEADER;
+        ENCAP_TYPE_T encapType = _GTP;
+
+        uint encapTunnelEndpointId = enb_fteid.teid ;
+        uint tunnelEndpointId = spgw_teid.teid ;
+
+
+        m_gtpc_log->info("srcip: %s uint:%u", inet_ntoa(srcip), srcip.s_addr);
+        m_gtpc_log->info("dstip: %s uint:%u", inet_ntoa(dstip), dstip.s_addr);
+        m_gtpc_log->info("request ipver: %u", ipver);
+        m_gtpc_log->info("request protcoldID: %u", proto);
+
+
+       requests = (sessionRequest_t **)malloc(bufferSize * (sizeof(requests)));
+        for (unsigned long i = 0; i < bufferSize; i++){
+                    request = (sessionRequest_t *)malloc(sizeof(*request));
+                    request->sessId = (2+sessionId);
+                    // for smartnic inlif/outlif should be a config variable
+                    request->inlif = 3;
+                    request->outlif = 4;
+                    request->srcPort = srcport;
+                    request->dstPort = dstport;
+                    request->proto = proto;
+                    request->ipver = ipver;
+                    request->nextHop = nexthopip;
+                    request->actType = action;
+                    request->srcIP = srcip;
+                    request->dstIP = dstip;
+                    request->cacheTimeout = timeout;
+		    request->matchType=matchType;
+                    request->encapType=encapType;
+                    request->tunnelEndpointId = tunnelEndpointId;
+                    request->encapTunnelEndpointId = encapTunnelEndpointId;
+                    request->encapMatchDestinationIp= encapMatchDestinationIp;
+                    requests[i] = request;
+                    m_gtpc_log->info("request session ID[%lu]: %lu", i,request->sessId);
+                    m_gtpc_log->info("request ipver in loop[%lu]: %i", i, request->ipver);
+                    m_gtpc_log->info("request srcIP in loop[%lu]: %u", i, request->srcIP.s_addr);
+                    m_gtpc_log->info("request timeout in loop[%lu]: %u", i, request->cacheTimeout);
+         }
+
+         m_gtpc_log->info("requests[0].ipver %i" , requests[0]->ipver);
+         status = opof_add_session(bufferSize,opof_handle, requests, &addResp);
+         if (status == FAILURE){
+             m_gtpc_log->info("ERROR: Adding offload sessions");
+             m_gtpc_log->error("ERROR: Adding offload sessions");
+             //return FAILURE;
+             return -1 ;
+         }
+         if (addResp.number_errors > 0){
+             m_gtpc_log->info("\n\nErrors in the following sessions\n");
+             for (int i=0; i < addResp.number_errors; i++){
+                 m_gtpc_log->info("\tSessionId: %lu\t error: %i\n", addResp.sessionErrors[i].sessionId, addResp.sessionErrors[i].errorStatus);
+             }
+         }
+         m_gtpc_log->info("addSession number_errors: %i", addResp.number_errors);
+
+  return  0;
+}
+
+
+
+
 
 void spgw::gtpc::handle_modify_bearer_request(const struct srslte::gtpc_header&                mb_req_hdr,
                                               const struct srslte::gtpc_modify_bearer_request& mb_req)
@@ -316,6 +514,14 @@ void spgw::gtpc::handle_delete_session_request(const srslte::gtpc_header&       
   }
   spgw_tunnel_ctx_t* tunnel_ctx = tunnel_it->second;
   in_addr_t          ue_ipv4    = tunnel_ctx->ue_ipv4;
+  // remove session of offload table
+  int m=offload_delete_session(tunnel_ctx);
+  if (m < 0) {
+    m_gtpc_log->error("Could not delete offload_session.\n");
+  } else {
+    m_gtpc_log->debug("Offloaded session deleted");
+  }
+
   m_gtpu->delete_gtpu_tunnel(ue_ipv4);
   delete_gtpc_ctx(ctrl_teid);
   return;
@@ -333,6 +539,15 @@ void spgw::gtpc::handle_release_access_bearers_request(const srslte::gtpc_header
   }
   spgw_tunnel_ctx_t* tunnel_ctx = tunnel_it->second;
   in_addr_t          ue_ipv4    = tunnel_ctx->ue_ipv4;
+  
+  // remove session of offload table
+  int m=offload_delete_session(tunnel_ctx);
+  if (m < 0) {
+    m_gtpc_log->error("Could not delete offload_session.\n");
+  } else {
+    m_gtpc_log->debug("Offloaded session deleted");
+  }
+
 
   // Delete data tunnel & do NOT delete control tunnel
   m_gtpu->delete_gtpu_tunnel(ue_ipv4);

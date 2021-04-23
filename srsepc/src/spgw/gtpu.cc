@@ -369,9 +369,6 @@ int spgw::gtpu::offload_add_session(srslte::byte_buffer_t* msg)
         */
         bufferSize=1;
         unsigned long sessionId;
-	// need srcLTE freiendly sessionId
-	// not clear teid is appropriate
-        sessionId=header.teid ;
         clock_t begin = clock();
         int status;
         PROTOCOL_ID_T proto;
@@ -406,6 +403,9 @@ int spgw::gtpu::offload_add_session(srslte::byte_buffer_t* msg)
 	uint encapTunnelEndpointId = enb_fteid.teid ;
 	uint tunnelEndpointId = spgw_teid ;
 
+	// need srcLTE freiendly sessionId
+	// not clear teid is appropriate
+        sessionId=spgw_teid;
 
         m_gtpu_log->info("srcip: %s uint:%u", inet_ntoa(srcip), srcip.s_addr);
         m_gtpu_log->info("dstip: %s uint:%u", inet_ntoa(dstip), dstip.s_addr);

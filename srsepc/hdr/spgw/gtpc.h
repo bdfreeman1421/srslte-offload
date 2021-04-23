@@ -22,6 +22,7 @@
 #define SRSEPC_GTPC_H
 
 #include "srsepc/hdr/spgw/spgw.h"
+#include "srsepc/hdr/spgw/opof_clientlib.h"
 #include "srslte/asn1/gtpc.h"
 #include "srslte/interfaces/epc_interfaces.h"
 #include <set>
@@ -44,6 +45,7 @@ public:
 
   int init_s11(spgw_args_t* args);
   int init_ue_ip(spgw_args_t* args, const std::map<std::string, uint64_t>& ip_to_imsi);
+  int init_opof(spgw_args_t* args);
 
   int       get_s11();
   uint64_t  get_new_ctrl_teid();
@@ -54,6 +56,9 @@ public:
   bool send_s11_pdu(const srslte::gtpc_pdu& pdu);
 
   void handle_create_session_request(const srslte::gtpc_create_session_request& cs_req);
+  int offload_add_session(spgw_tunnel_ctx_t* tunnel_ctx);
+  int offload_delete_session(spgw_tunnel_ctx_t* tunnel_ctx);
+
   void handle_modify_bearer_request(const srslte::gtpc_header&                mb_req_hdr,
                                     const srslte::gtpc_modify_bearer_request& mb_req);
   void handle_delete_session_request(const srslte::gtpc_header&                 header,
@@ -80,6 +85,10 @@ public:
 
   int                m_s11;
   struct sockaddr_un m_spgw_addr, m_mme_addr;
+
+  sessionTable_t*      opof_handle;
+  in_addr_t            sgi_saddr;
+  int                  sgi_sport;
 
   uint32_t m_h_next_ue_ip;
   uint64_t m_next_ctrl_teid;
