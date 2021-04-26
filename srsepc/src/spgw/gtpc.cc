@@ -294,7 +294,11 @@ int spgw::gtpc::offload_delete_session(spgw_tunnel_ctx_t* tunnel_ctx)
     m_gtpc_log->info("ERROR: Deleting offload session");
     m_gtpc_log->error("ERROR: Deleteing offload sessions");
     return -1 ;
- }
+  }
+  m_gtpc_log->info("offload.sessionCloseCode: %i" , delResp.sessionState);
+  m_gtpc_log->info("offload.inPackets: %li" , delResp.inPackets);
+  m_gtpc_log->info("offload.outPackets: %li" , delResp.outPackets);
+
 return 0;
 }
 
@@ -545,7 +549,7 @@ void spgw::gtpc::handle_release_access_bearers_request(const srslte::gtpc_header
   if (m < 0) {
     m_gtpc_log->error("Could not delete offload_session.\n");
   } else {
-    m_gtpc_log->debug("Offloaded session deleted");
+    m_gtpc_log->info("Offloaded session deleted");
   }
 
 
