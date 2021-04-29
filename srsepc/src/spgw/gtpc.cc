@@ -275,12 +275,6 @@ void spgw::gtpc::handle_create_session_request(const struct srslte::gtpc_create_
   // Send Create session response to MME
   send_s11_pdu(cs_resp_pdu);
 
-  int m = offload_add_session(tunnel_ctx);
-  if (m < 0) {
-    m_gtpc_log->error("Could not add offload_session.\n");
-  } else {
-    m_gtpc_log->debug("Offloaded session");
-  }
 
   return;
 }
@@ -504,6 +498,15 @@ void spgw::gtpc::handle_modify_bearer_request(const struct srslte::gtpc_header& 
 
   // Send Modify Bearer Response PDU
   send_s11_pdu(mb_resp_pdu);
+
+  // setup opof offload
+  int m = offload_add_session(tunnel_ctx);
+  if (m < 0) {
+    m_gtpc_log->error("Could not add offload_session.\n");
+  } else {
+    m_gtpc_log->debug("Offloaded session");
+  }
+
   return;
 }
 
